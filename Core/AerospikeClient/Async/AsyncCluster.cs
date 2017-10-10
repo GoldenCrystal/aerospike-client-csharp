@@ -25,7 +25,7 @@ namespace Aerospike.Client
 	public sealed class AsyncCluster : Cluster
 	{
 		// Pool used in asynchronous SocketChannel communications.
-		private readonly BlockingCollection<SocketAsyncEventArgs> argsQueue;
+		private readonly AsyncCommandQueue commandQueue;
 
 		// Contiguous pool of byte buffers.
 		private BufferPool bufferPool;
@@ -33,22 +33,17 @@ namespace Aerospike.Client
 		// Maximum number of concurrent asynchronous commands.
 		private readonly int maxCommands;
 
-		// How to handle cases when the asynchronous maximum number of concurrent database commands 
-		// have been exceeded.  
-		private readonly bool block;
-
 		public AsyncCluster(AsyncClientPolicy policy, Host[] hosts) : base(policy, hosts)
 		{
 			maxCommands = policy.asyncMaxCommands;
-			block = policy.asyncMaxCommandAction == MaxCommandAction.BLOCK;
-			argsQueue = new BlockingCollection<SocketAsyncEventArgs>(maxCommands);
+			commandQueue = new AsyncCommandQueue(policy.asyncMaxCommandAction == MaxCommandAction.BLOCK);
 
 			for (int i = 0; i < maxCommands; i++)
 			{
 				SocketAsyncEventArgs eventArgs = new SocketAsyncEventArgs();
 				eventArgs.UserToken = new BufferSegment();
 				eventArgs.Completed += AsyncCommand.SocketListener;
-				argsQueue.Add(eventArgs);
+				commandQueue.ReleaseArgs(eventArgs);
 			}
 
 			bufferPool = new BufferPool();
@@ -60,28 +55,18 @@ namespace Aerospike.Client
 			return new AsyncNode(this, nv);
 		}
 
-		public SocketAsyncEventArgs GetEventArgs()
+		public void ScheduleCommandExecution(AsyncCommand command)
 		{
-			if (block)
+			if (!commandQueue.ScheduleCommand(command))
 			{
-				// Use blocking retrieve from queue.
-				// If queue is empty, wait till an item is available.
-				return argsQueue.Take();
+				// Queue is empty. Reject command.
+				throw new AerospikeException.CommandRejected();
 			}
-
-			// Use non-blocking retrieve from queue.
-			SocketAsyncEventArgs args;
-			if (argsQueue.TryTake(out args))
-			{
-				return args;
-			}
-			// Queue is empty. Reject command.
-			throw new AerospikeException.CommandRejected();
 		}
 
 		public void PutEventArgs(SocketAsyncEventArgs args)
 		{
-			argsQueue.Add(args);
+			commandQueue.ReleaseArgs(args);
 		}
 
 		public void GetNextBuffer(int size, BufferSegment segment)

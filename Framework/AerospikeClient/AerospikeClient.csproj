@@ -218,6 +218,9 @@
     <Compile Include="..\..\Core\AerospikeClient\Async\AsyncCommand.cs">
       <Link>Async\AsyncCommand.cs</Link>
     </Compile>
+    <Compile Include="..\..\Core\AerospikeClient\Async\AsyncCommandQueue.cs">
+      <Link>Async\AsyncCommandQueue.cs</Link>
+    </Compile>
     <Compile Include="..\..\Core\AerospikeClient\Async\AsyncConnection.cs">
       <Link>Async\AsyncConnection.cs</Link>
     </Compile>
