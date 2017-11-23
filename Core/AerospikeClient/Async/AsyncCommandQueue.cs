@@ -98,7 +98,11 @@ namespace Aerospike.Client
 		{
 			if (Interlocked.CompareExchange(ref _jobScheduled, 1, 0) == 0)
 			{
+#if NETCORE && !NETSTANDARD2_0
+				ThreadPool.QueueUserWorkItem(_schedulingJobCallback, null);
+#else
 				ThreadPool.UnsafeQueueUserWorkItem(_schedulingJobCallback, null);
+#endif
 			}
 		}
 
