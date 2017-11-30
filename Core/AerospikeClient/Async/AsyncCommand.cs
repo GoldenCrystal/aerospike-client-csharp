@@ -26,7 +26,7 @@ namespace Aerospike.Client
 	/// </summary>
 	public abstract class AsyncCommand : Command
 	{
-		public static EventHandler<SocketAsyncEventArgs> SocketListener => EventHandlers.SocketHandler;
+		public static EventHandler<SocketAsyncEventArgs> SocketListener { get { return EventHandlers.SocketHandler; } }
 		private const int IN_PROGRESS = 0;
 		private const int SUCCESS = 1;
 		private const int RETRY = 2;
@@ -82,11 +82,14 @@ namespace Aerospike.Client
 			this.usingSocketTimeout = other.usingSocketTimeout;
 		}
 
-		// Simply ask the cluster objet to schedule the command for execution.
-		// It may or may not be immediate, depending on the number of executing commands.
-		// If immediate, the command will start its execution on the current thread.
-		// Otherwise, the command will start its execution from the thread pool.
-		public void Execute() => cluster.ScheduleCommandExecution(this);
+        // Simply ask the cluster objet to schedule the command for execution.
+        // It may or may not be immediate, depending on the number of executing commands.
+        // If immediate, the command will start its execution on the current thread.
+        // Otherwise, the command will start its execution from the thread pool.
+        public void Execute()
+        {
+            cluster.ScheduleCommandExecution(this);
+        }
 
 		// Executes the command from the thread pool, using the specified SocketAsyncEventArgs object.
 		internal void ExecuteAsync(SocketAsyncEventArgs e)
