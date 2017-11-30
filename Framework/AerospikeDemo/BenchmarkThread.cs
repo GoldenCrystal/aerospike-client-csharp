@@ -26,18 +26,20 @@ namespace Aerospike.Demo
 		protected readonly Console console;
         protected readonly BenchmarkArguments args;
         protected readonly BenchmarkShared shared;
-        private readonly Example example;
+        protected readonly Example example;
         private readonly RandomShift random;
         private Thread thread;
-
-        public BenchmarkThread(Console console, BenchmarkArguments args, BenchmarkShared shared, Example example)
+        private readonly CountdownEvent initCountdownEvent;
+        
+        public BenchmarkThread(Console console, BenchmarkArguments args, BenchmarkShared shared, Example example, CountdownEvent initCountdownEvent)
 		{
 			this.console = console;
             this.args = args;
             this.shared = shared;
             this.example = example;
 			random = new RandomShift();
-		}
+            this.initCountdownEvent = initCountdownEvent;
+        }
 
         public void Start()
         {
@@ -57,11 +59,19 @@ namespace Aerospike.Demo
                 {
                     RunWorker();
                 }
+
+                WaitForCompletion();
             }
             catch (Exception ex)
             {
                 console.Error(ex.Message);
             }
+        }
+
+        protected virtual void WaitForCompletion()
+        {
+            // Wait for either the cancellation of the benchmark, or the completion of the initialization.
+            WaitHandle.WaitAny(new[] { example.WaitHandle, initCountdownEvent.WaitHandle });
         }
 
         public void Join()
@@ -74,14 +84,15 @@ namespace Aerospike.Demo
         {
 			int key = shared.currentKey;
 
-            while (example.valid)
+            while (example.Valid)
             {
                 if (key >= args.recordsInit)
                 {
                     if (key == args.recordsInit)
                     {
+                        initCountdownEvent.Wait();
                         console.Info("write(tps={0} timeouts={1} errors={2} total={3}))",
-                            shared.writeCount, shared.writeTimeoutCount, shared.writeErrorCount, args.recordsInit
+                            shared.writeCount, shared.writeTimeoutCount, shared.writeErrorCount, shared.completedOperationCount
                         );
                     }
                     break;
@@ -93,7 +104,7 @@ namespace Aerospike.Demo
         
 		private void RunWorker()
 		{
-            while (example.valid)
+            while (example.Valid)
             {
                 // Choose key at random.
                 int key = random.Next(0, args.records);
@@ -149,17 +160,38 @@ namespace Aerospike.Demo
 			}
 		}
 
+        protected virtual void SignalCompletedOperation()
+        {
+            Interlocked.Increment(ref shared.completedOperationCount);
+        }
+
+        private void SignalCompletedWrite()
+        {
+            if (initCountdownEvent.InitialCount > 0)
+            {
+                initCountdownEvent.Signal();
+            }
+            SignalCompletedOperation();
+        }
+
+        private void SignalCompletedRead()
+        {
+            SignalCompletedOperation();
+        }
+
 		protected void OnWriteSuccess()
 		{
 			Interlocked.Increment(ref shared.writeCount);
-		}
+            SignalCompletedWrite();
+        }
 
         protected void OnWriteSuccess(double elapsed)
         {
             Interlocked.Increment(ref shared.writeCount);
             shared.writeLatency.Add(elapsed);
+            SignalCompletedWrite();
         }
-        
+
         protected void OnWriteFailure(Key key, Bin bin, AerospikeException ae)
 		{
 			if (ae.Result == ResultCode.TIMEOUT)
@@ -176,9 +208,10 @@ namespace Aerospike.Demo
 						key.ns, key.setName, key.userKey, bin.name, ae.Message);
 				}
 			}
-	    }
+            SignalCompletedWrite();
+        }
 
-		protected void OnWriteFailure(Key key, Bin bin, Exception e)
+        protected void OnWriteFailure(Key key, Bin bin, Exception e)
 		{
 			Interlocked.Increment(ref shared.writeErrorCount);
 			
@@ -187,20 +220,23 @@ namespace Aerospike.Demo
 				console.Error("Write error: ns={0} set={1} key={2} bin={3} exception={4}",
                     key.ns, key.setName, key.userKey, bin.name, e.Message);
 			}
-	    }
+            SignalCompletedWrite();
+        }
 
-		protected void OnReadSuccess()
+        protected void OnReadSuccess()
 		{
             Interlocked.Increment(ref shared.readCount);
-		}
+            SignalCompletedRead();
+        }
 
         protected void OnReadSuccess(double elapsed)
         {
             Interlocked.Increment(ref shared.readCount);
             shared.readLatency.Add(elapsed);
+            SignalCompletedRead();
         }
 
-		protected void OnReadFailure(Key key, AerospikeException ae)
+        protected void OnReadFailure(Key key, AerospikeException ae)
 		{
 			if (ae.Result == ResultCode.TIMEOUT)
 			{
@@ -216,9 +252,10 @@ namespace Aerospike.Demo
 						key.ns, key.setName, key.userKey, ae.Message);
 				}
 			}
-		}
-		
-		protected void OnReadFailure(Key key, Exception e)
+            SignalCompletedRead();
+        }
+
+        protected void OnReadFailure(Key key, Exception e)
 		{
 			Interlocked.Increment(ref shared.readErrorCount);
 
@@ -227,9 +264,10 @@ namespace Aerospike.Demo
 				console.Error("Read error: ns={0} set={1} key={2} exception={3}",
 					key.ns, key.setName, key.userKey, e.Message);
 			}
-		}
+            SignalCompletedRead();
+        }
 
-		protected abstract void WriteRecord(WritePolicy policy, Key key, Bin bin);
+        protected abstract void WriteRecord(WritePolicy policy, Key key, Bin bin);
 		protected abstract void ReadRecord(Policy policy, Key key, string binName);
 	}
 }

@@ -18,13 +18,41 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace Aerospike.Demo
 {
 	public abstract class Example
 	{
 		protected internal Console console;
-		public volatile bool valid;
+        private readonly ManualResetEventSlim manualResetEvent = new ManualResetEventSlim();
+
+        public WaitHandle WaitHandle
+        {
+            get
+            {
+                return manualResetEvent.WaitHandle;
+            }
+        }
+
+        public bool Valid
+        {
+            get
+            {
+                return !manualResetEvent.IsSet;
+            }
+            set
+            {
+                if (value)
+                {
+                    manualResetEvent.Reset();
+                }
+                else
+                {
+                    manualResetEvent.Set();
+                }
+            }
+        }
 
 		public Example(Console console)
 		{
@@ -33,12 +61,12 @@ namespace Aerospike.Demo
 
 		public void Stop()
 		{
-			valid = false;
+			Valid = false;
 		}
 
 		public void Run(Arguments args)
 		{
-			valid = true;
+			Valid = true;
 			console.Clear();
 			console.Info(this.GetType().Name + " Begin");
 			RunExample(args);

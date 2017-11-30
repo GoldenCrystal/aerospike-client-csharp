@@ -46,12 +46,12 @@ namespace Aerospike.Demo
                 latencyHeader = shared.writeLatency.PrintHeader();
             }
 
-			while (valid)
+			while (Valid)
 			{
 				int writeCurrent = Interlocked.Exchange(ref shared.writeCount, 0);
 				int writeTimeoutCurrent = Interlocked.Exchange(ref shared.writeTimeoutCount, 0);
 				int writeErrorCurrent = Interlocked.Exchange(ref shared.writeErrorCount, 0);
-				int totalCount = shared.currentKey;
+				int totalCount = shared.completedOperationCount;
 				
 				DateTime time = DateTime.Now;
 				double seconds = (double)time.Subtract(prevTime).TotalSeconds;

@@ -38,6 +38,7 @@ namespace Aerospike.Demo
         {
             this.args = (BenchmarkArguments)a;
             shared = new BenchmarkShared(args);
+            var initCountdownEvent = new CountdownEvent(args.recordsInit);
 
             if (args.sync)
             {
@@ -54,7 +55,7 @@ namespace Aerospike.Demo
                     threads = new BenchmarkThreadSync[args.threadMax];
                     for (int i = 0; i < args.threadMax; i++)
                     {
-                        threads[i] = new BenchmarkThreadSync(console, args, shared, this, client);
+                        threads[i] = new BenchmarkThreadSync(console, args, shared, this, initCountdownEvent, client);
                     }
                     RunThreads();
                 }
@@ -83,7 +84,7 @@ namespace Aerospike.Demo
                     threads = new BenchmarkThreadAsync[args.threadMax];
                     for (int i = 0; i < args.threadMax; i++)
                     {
-                        threads[i] = new BenchmarkThreadAsync(console, args, shared, this, client);
+                        threads[i] = new BenchmarkThreadAsync(console, args, shared, this, initCountdownEvent, client);
                     }
                     RunThreads();
                 }
@@ -99,7 +100,7 @@ namespace Aerospike.Demo
             RunBegin();
 
             console.Info("Start " + threads.Length + " generator threads");
-            valid = true;
+            Valid = true;
             tickerThread = new Thread(new ThreadStart(this.Ticker));
             tickerThread.Start();
 
@@ -113,7 +114,7 @@ namespace Aerospike.Demo
                 thread.Join();
             }
 
-            valid = false;
+            Valid = false;
             tickerThread.Join();
         }
 

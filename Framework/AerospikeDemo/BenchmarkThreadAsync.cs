@@ -25,6 +25,8 @@ namespace Aerospike.Demo
 	class BenchmarkThreadAsync : BenchmarkThread
 	{
 		private AsyncClient client;
+        private SemaphoreSlim semaphore;
+        private int concurrencyLimit;
 
         public BenchmarkThreadAsync
         (
@@ -32,11 +34,33 @@ namespace Aerospike.Demo
             BenchmarkArguments args,
             BenchmarkShared shared,
             Example example,
+            CountdownEvent initCountdownEvent,
             AsyncClient client
-        ) : base(console, args, shared, example)
+        ) : base(console, args, shared, example, initCountdownEvent)
 		{
 			this.client = client;
-		}
+            this.concurrencyLimit = Math.Max(1, args.commandMax / args.threadMax); // Don't start too many async operations at the same time. (This prevents the read/write benchmark of queing a huge number of asynchronous operations)
+            this.semaphore = new SemaphoreSlim(concurrencyLimit, concurrencyLimit);
+        }
+
+        protected override void WaitForCompletion()
+        {
+            base.WaitForCompletion();
+
+            // Starve the semaphore… Thus waiting for all asynchronous commands to complete.
+            for (int i = 0; i < concurrencyLimit; i++)
+            {
+                semaphore.Wait();
+            }
+        }
+
+        protected override void SignalCompletedOperation()
+        {
+            base.SignalCompletedOperation();
+
+            // Notify that one operation that was started has completed.
+            semaphore.Release();
+        }
 
         protected override void WriteRecord(WritePolicy policy, Key key, Bin bin)
 		{
@@ -46,6 +70,9 @@ namespace Aerospike.Demo
 			{
 				Thread.Yield();
 			}
+
+            // Wait for one free slot before starting the async operation.
+            semaphore.Wait();
 
             if (shared.writeLatency != null)
             {
@@ -65,6 +92,9 @@ namespace Aerospike.Demo
 			{
 				Thread.Yield();
 			}
+
+            // Wait for one free slot before starting the async operation.
+            semaphore.Wait();
 
             if (shared.readLatency != null)
             {
@@ -97,8 +127,8 @@ namespace Aerospike.Demo
 			public void OnFailure(AerospikeException e)
 			{
 				parent.OnWriteFailure(key, bin, e);
-			}
-		}
+            }
+        }
 
         private class LatencyWriteHandler : WriteListener
         {

@@ -33,9 +33,11 @@ namespace Aerospike.Demo
 		internal int readTimeoutCount;
 		internal int readErrorCount;
 
-		internal int currentKey;
+		internal volatile int completedOperationCount;
 
-		public BenchmarkShared(BenchmarkArguments args)
+		internal volatile int currentKey;
+
+        public BenchmarkShared(BenchmarkArguments args)
 		{
 			if (args.latency)
 			{

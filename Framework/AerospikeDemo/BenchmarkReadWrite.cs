@@ -47,7 +47,7 @@ namespace Aerospike.Demo
                 latencyHeader = shared.writeLatency.PrintHeader();
             }
 
-			while (valid)
+			while (Valid)
 			{
 				int writeCurrent = Interlocked.Exchange(ref shared.writeCount, 0);
 				int writeTimeoutCurrent = Interlocked.Exchange(ref shared.writeTimeoutCount, 0);

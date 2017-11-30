@@ -32,8 +32,9 @@ namespace Aerospike.Demo
             BenchmarkArguments args,
             BenchmarkShared shared,
             Example example,
+            CountdownEvent initCountdownEvent,
             AerospikeClient client
-        ) : base(console, args, shared, example)
+        ) : base(console, args, shared, example, initCountdownEvent)
 		{
 			this.client = client;
 		}
