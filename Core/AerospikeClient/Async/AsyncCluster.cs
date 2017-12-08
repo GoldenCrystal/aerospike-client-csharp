@@ -25,7 +25,7 @@ namespace Aerospike.Client
 	public sealed class AsyncCluster : Cluster
 	{
 		// Pool used in asynchronous SocketChannel communications.
-		private readonly AsyncCommandQueue commandQueue;
+		private readonly AsyncCommandQueueBase commandQueue;
 
 		// Contiguous pool of byte buffers.
 		private BufferPool bufferPool;
@@ -36,7 +36,14 @@ namespace Aerospike.Client
 		public AsyncCluster(AsyncClientPolicy policy, Host[] hosts) : base(policy, hosts)
 		{
 			maxCommands = policy.asyncMaxCommands;
-			commandQueue = new AsyncCommandQueue(policy.asyncMaxCommandAction == MaxCommandAction.BLOCK);
+
+			switch (policy.asyncMaxCommandAction)
+			{
+				case MaxCommandAction.REJECT: commandQueue = new AsyncCommandRejectingQueue(); break;
+				case MaxCommandAction.BLOCK: commandQueue = new AsyncCommandBlockingQueue(); break;
+				case MaxCommandAction.DELAY: commandQueue = new AsyncCommandDelayingQueue(); break;
+				default: throw new AerospikeException(ResultCode.PARAMETER_ERROR, "Unsupported MaxCommandAction value: " + policy.asyncMaxCommandAction.ToString() + ".");
+			}
 
 			for (int i = 0; i < maxCommands; i++)
 			{

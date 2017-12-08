@@ -14,53 +14,42 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-using System;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
-using System.Threading;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace Aerospike.Client
 {
-	internal sealed class AsyncCommandQueue
+	internal sealed class AsyncCommandDelayingQueue : AsyncCommandQueueBase
 	{
 		private readonly ConcurrentQueue<SocketAsyncEventArgs> _argsQueue = new ConcurrentQueue<SocketAsyncEventArgs>();
-		private readonly ConcurrentQueue<AsyncCommand> _commandQueue;
+		private readonly ConcurrentQueue<AsyncCommand> _commandQueue = new ConcurrentQueue<AsyncCommand>();
 		private readonly WaitCallback _schedulingJobCallback;
 		private volatile int _jobScheduled;
 
-		public AsyncCommandQueue(bool blocking)
+		public AsyncCommandDelayingQueue()
 		{
-			// Only allocate a concurrent queue of AsyncCommand objects if the blocking mode was requested.
-			// In non blocking mode, we won't have to queue commands for later execution so, it's useless.
-			if (blocking)
-			{
-				_commandQueue = new ConcurrentQueue<AsyncCommand>();
-				_schedulingJobCallback = new WaitCallback(ExclusiveScheduleCommands);
-			}
+			_schedulingJobCallback = new WaitCallback(ExclusiveScheduleCommands);
 		}
 
 		// Releases a SocketEventArgs object to the pool.
-		public void ReleaseArgs(SocketAsyncEventArgs e)
+		public override void ReleaseArgs(SocketAsyncEventArgs e)
 		{
 			AsyncCommand command;
 
-			if (_commandQueue != null && _commandQueue.TryDequeue(out command))
+			if (_commandQueue.TryDequeue(out command))
 			{
 				command.ExecuteAsync(e);
 			}
 			else
 			{
 				_argsQueue.Enqueue(e);
-				if (_commandQueue != null)
-				{
-					TriggerCommandScheduling();
-				}
+				TriggerCommandScheduling();
 			}
 		}
 
 		// Schedules a command for later execution.
-		public bool ScheduleCommand(AsyncCommand command)
+		public override bool ScheduleCommand(AsyncCommand command)
 		{
 			SocketAsyncEventArgs e;
 
@@ -68,7 +57,7 @@ namespace Aerospike.Client
 			if (_argsQueue.TryDequeue(out e))
 			{
 				// If there are no awaiting command, the current command can be executed immediately.
-				if (_commandQueue == null || _commandQueue.IsEmpty) // NB: We could make the choice to always execute the command synchronously in this case. Might be better for eprformance.
+				if (_commandQueue.IsEmpty) // NB: We could make the choice to always execute the command synchronously in this case. Might be better for performance.
 				{
 					command.ExecuteInline(e);
 					return true;
@@ -78,15 +67,10 @@ namespace Aerospike.Client
 					_argsQueue.Enqueue(e);
 				}
 			}
-			else if (_commandQueue != null)
+			else
 			{
 				// In blocking mode, the command can be queued for later execution.
 				_commandQueue.Enqueue(command);
-			}
-			else
-			{
-				// In non-blocking mode, we can't queue commands. Scheduling will fail if no SocketAsyncEventArgs object is available.
-				return false;
 			}
 
 			TriggerCommandScheduling();
