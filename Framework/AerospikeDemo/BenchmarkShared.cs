@@ -35,7 +35,7 @@ namespace Aerospike.Demo
 
 		internal volatile int completedOperationCount;
 
-		internal volatile int currentKey;
+		internal volatile int currentKey = -1;
 
         public BenchmarkShared(BenchmarkArguments args)
 		{
